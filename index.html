@@ -1,0 +1,1010 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Telemetria">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<title>F1 Telemetria</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  /* Cores do sistema da Apple (claro / escuro) */
+  :root {
+    --bg: #f2f2f7; --card: #fff; --card2: #e9e9ee; --seg-sel: #fff;
+    --fg: #000; --mut: rgba(60,60,67,.6); --sep: rgba(60,60,67,.16);
+    --a: #ff3b30; --r: #007aff; --verde: #34c759; --laranja: #ff9500; --roxo: #af52de;
+    --vidro: rgba(249,249,249,.78); --abas-h: 50px;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000; --card: #1c1c1e; --card2: #2c2c2e; --seg-sel: #636366;
+      --fg: #fff; --mut: rgba(235,235,245,.6); --sep: rgba(84,84,88,.55);
+      --a: #ff453a; --r: #0a84ff; --verde: #30d158; --laranja: #ff9f0a; --roxo: #bf5af2;
+      --vidro: rgba(28,28,30,.78);
+    }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    :root { --vidro: var(--card); }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+  html { background: var(--bg); }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 17px/1.4 -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+
+  .pagina { max-width: 720px; margin: 0 auto;
+            padding: calc(env(safe-area-inset-top) + 14px) 16px calc(var(--abas-h) + env(safe-area-inset-bottom) + 28px);
+            animation: entra .18s ease-out; }
+  @keyframes entra { from { opacity: 0; } }
+
+  /* Tipografia: título grande com tracking negativo, corpo neutro */
+  .sobre { margin: 0; font-size: 13px; font-weight: 600; color: var(--mut); letter-spacing: .01em; text-transform: uppercase; }
+  h1 { margin: 2px 0 16px; font-size: 34px; line-height: 1.1; font-weight: 700; letter-spacing: -.022em; }
+  .secao { margin: 28px 4px 8px; font-size: 20px; line-height: 1.2; font-weight: 700; letter-spacing: -.015em; }
+  .secao small { font-size: 13px; font-weight: 500; color: var(--mut); letter-spacing: 0; }
+
+  .card { background: var(--card); border-radius: 14px; }
+  .hero { padding: 18px; }
+  .hero .tempo { font-size: 52px; line-height: 1; font-weight: 700; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+  .hero .linha2 { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--mut); font-size: 15px; }
+  .chip { display: inline-block; padding: 3px 9px; border-radius: 99px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chip.perde { background: color-mix(in srgb, var(--a) 15%, transparent); color: var(--a); }
+  .chip.ganha { background: color-mix(in srgb, var(--verde) 17%, transparent); color: var(--verde); }
+  .chip.neutro { background: var(--card2); color: var(--mut); }
+
+  /* Listas agrupadas (estilo Ajustes do iOS) */
+  .lista { list-style: none; margin: 0; padding: 0; background: var(--card); border-radius: 14px; overflow: hidden; }
+  .lista > li { position: relative; display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; }
+  .lista > li + li::before { content: ''; position: absolute; top: 0; left: 16px; right: 0; border-top: .5px solid var(--sep); }
+  .toque { cursor: pointer; transition: background-color .2s; }
+  .toque:active { background: var(--card2); transition: none; }
+  .badge { flex: none; min-width: 46px; max-width: 108px; padding: 4px 6px; border-radius: 8px; background: var(--card2);
+           font-size: 15px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+  .corpo { flex: 1; min-width: 0; }
+  .partes { margin: 0; padding: 0; list-style: none; font-size: 15px; line-height: 1.35; }
+  .partes li + li { margin-top: 2px; }
+  .partes .fase { display: grid; grid-template-columns: 1fr auto; column-gap: 8px; }
+  .partes .fase + .fase { margin-top: 6px; }
+  .fase-nome { font-weight: 600; }
+  .fase-perda { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .fase-partes { grid-column: 1 / -1; font-size: 14px; color: var(--mut); }
+  .fase.pior .fase-partes { color: var(--fg); }
+  .fase.fraca .fase-nome { color: var(--mut); font-weight: 500; }
+  .perda { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .vazio { color: var(--mut); font-size: 15px; }
+  .lista .vazio { padding: 2px 0; }
+  .sub { font-size: 13px; color: var(--mut); }
+
+  /* Voltas */
+  .volta { align-items: center !important; }
+  .volta strong { font-size: 20px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; margin-right: 6px; }
+  .acoes { display: flex; gap: 6px; }
+  .pilula { border: 0; font: inherit; font-size: 13px; font-weight: 600; padding: 7px 13px; border-radius: 99px;
+            background: var(--card2); color: var(--fg); cursor: pointer; transition: transform .15s; }
+  .pilula:active { transform: scale(.94); transition: none; }
+  .pilula.ativa-a { background: var(--a); color: #fff; }
+  .pilula.ativa-b { background: var(--r); color: #fff; }
+  .pilula:disabled { opacity: .3; cursor: default; }
+
+  /* Controle segmentado */
+  .segmentos { position: relative; display: flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--card2);
+               overflow-x: auto; scrollbar-width: none; }
+  .segmentos label { flex: 1 0 auto; padding: 6px 10px; border-radius: 7px; text-align: center; white-space: nowrap;
+                     font-size: 13px; font-weight: 500; cursor: pointer; transition: background-color .2s; }
+  .segmentos input { position: absolute; opacity: 0; pointer-events: none; }
+  .segmentos label:has(input:checked) { background: var(--seg-sel); font-weight: 600;
+                                        box-shadow: 0 2px 6px rgba(0,0,0,.12), 0 0 0 .5px rgba(0,0,0,.04); }
+
+  /* Página do mapa: ocupa a tela inteira */
+  #mapa.pagina { display: flex; flex-direction: column; height: 100dvh; padding-bottom: calc(var(--abas-h) + env(safe-area-inset-bottom) + 8px); }
+  #mapa h1 { margin-bottom: 10px; }
+  #caixa-mapa { position: relative; flex: 1; min-height: 260px; margin-top: 8px; }
+  .vidro { background: var(--vidro); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); }
+  .flutua { position: absolute; z-index: 2; }
+  .botoes-mapa { top: 4px; right: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .chip-bt { border: 0; font: inherit; font-size: 14px; font-weight: 600; color: var(--r); padding: 7px 13px;
+             border-radius: 99px; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.12); transition: transform .15s; }
+  .chip-bt:active { transform: scale(.94); transition: none; }
+  #bt-zebras[aria-pressed="false"] { color: var(--mut); text-decoration: line-through; }
+
+  /* Rádio */
+  .linha-radio { display: flex; align-items: center; gap: 10px; margin: -6px 0 14px; }
+  #bt-radio { flex: none; box-shadow: none; background: var(--card); }
+  #bt-radio.ligado { background: var(--verde); color: #fff; }
+
+  /* Engenheiro (IA) */
+  .ia { padding: 14px 16px; font-size: 15px; line-height: 1.45; }
+  .ia p { margin: 0 0 8px; }
+  .ia p:last-child { margin-bottom: 0; }
+  .pilula.grande { font-size: 15px; padding: 10px 16px; background: var(--r); color: #fff; }
+  .carregando { display: flex; align-items: center; gap: 10px; color: var(--mut); }
+  .carregando::before { content: ''; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--sep);
+                        border-top-color: var(--r); animation: gira .8s linear infinite; }
+  @keyframes gira { to { transform: rotate(360deg); } }
+
+  /* Status ao vivo */
+  .status { display: flex; align-items: center; gap: 12px; padding: 12px 16px; font-size: 15px; }
+  .status .ponto { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--mut); }
+  .status.ao-vivo .ponto { background: var(--verde); box-shadow: 0 0 0 4px color-mix(in srgb, var(--verde) 25%, transparent);
+                           animation: pulsa 2s ease-in-out infinite; }
+  @keyframes pulsa { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--verde) 0%, transparent); } }
+  #legenda { left: 0; top: 4px; display: none; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 99px;
+             font-size: 12px; font-weight: 500; color: var(--mut); box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+  #leg-barra { width: 90px; height: 8px; border-radius: 4px; }
+  .nota { margin: 6px 4px 0; font-size: 12px; color: var(--mut); }
+
+  /* Folha da curva: material translúcido que sobe de baixo, sem escurecer o mapa */
+  #folha { position: fixed; z-index: 9; left: 8px; right: 8px; max-width: 704px; margin: 0 auto;
+           bottom: calc(var(--abas-h) + env(safe-area-inset-bottom) + 8px);
+           padding: 14px 16px 16px; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,.22);
+           max-height: 46vh; overflow-y: auto;  /* o mapa fica sempre com mais da metade da tela */
+           transform: translateY(calc(100% + 140px)); transition: transform .38s cubic-bezier(.2,.9,.25,1); }
+  #folha.aberta { transform: none; }
+  #folha header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  #folha .badge { background: color-mix(in srgb, var(--fg) 10%, transparent); }
+  #folha .perda { font-size: 20px; }
+  #fechar { margin-left: auto; width: 30px; height: 30px; border: 0; border-radius: 50%; font-size: 17px; line-height: 1;
+            background: color-mix(in srgb, var(--fg) 10%, transparent); color: var(--mut); cursor: pointer; }
+  #folha { touch-action: pan-y; }
+  #folha.arrastando { transition: none; }
+  .seta { width: 34px; height: 34px; border: 0; border-radius: 50%; font-size: 24px; line-height: 1; padding-bottom: 3px;
+          background: color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); cursor: pointer; transition: transform .15s; }
+  .seta:active { transform: scale(.88); transition: none; }
+  .seta:disabled { opacity: .25; }
+  .numeros { display: flex; gap: 18px; margin: 2px 0 10px; font-variant-numeric: tabular-nums; }
+  .numeros div { display: flex; flex-direction: column; }
+  .numeros b { font-size: 17px; font-weight: 600; }
+  .numeros span { font-size: 11px; color: var(--mut); text-transform: uppercase; letter-spacing: .03em; }
+  .dica-gesto { margin: 10px 0 0; font-size: 12px; color: var(--mut); text-align: center; }
+
+  /* Gráficos */
+  .graf-card { padding: 12px 8px 6px; }
+  .graf { position: relative; height: 190px; }
+
+  /* Barra de abas translúcida */
+  .abas { position: fixed; z-index: 10; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-around;
+          padding: 6px 8px calc(env(safe-area-inset-bottom) + 4px); border-top: .5px solid var(--sep); }
+  .abas a { flex: 1; max-width: 120px; display: flex; flex-direction: column; align-items: center; gap: 1px;
+            color: var(--mut); text-decoration: none; font-size: 10px; font-weight: 500; letter-spacing: .01em; }
+  .abas svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+              transition: transform .15s; }
+  .abas a:active svg { transform: scale(.88); transition: none; }
+  .abas a[aria-current="page"] { color: var(--r); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pagina, .status.ao-vivo .ponto { animation: none; }
+    #folha { transition: opacity .2s; transform: none; opacity: 0; pointer-events: none; }
+    #folha.aberta { opacity: 1; pointer-events: auto; }
+  }
+</style>
+</head>
+<body>
+
+<section id="resumo" class="pagina">
+  <p class="sobre" id="sobre-resumo">&nbsp;</p>
+  <h1>Resumo</h1>
+  <div class="linha-radio">
+    <button id="bt-radio" class="chip-bt vidro">Ligar rádio</button>
+    <span class="sub" id="radio-nota">O engenheiro fala ao fim de cada volta.</span>
+  </div>
+  <div class="card hero" id="hero"><span class="vazio">Carregando…</span></div>
+  <div id="blocos-comparacao">
+    <h2 class="secao">Engenheiro <small>Claude Sonnet</small></h2>
+    <div class="card ia" id="ia"></div>
+    <h2 class="secao">Onde você perdeu tempo</h2>
+    <ul class="lista" id="lista-perdas"></ul>
+    <h2 class="secao">Onde você ganhou</h2>
+    <ul class="lista" id="lista-ganhos"></ul>
+    <p class="nota" id="nota-soma"></p>
+  </div>
+  <h2 class="secao">Vícios <small>últimas 20 voltas válidas</small></h2>
+  <div class="card ia" id="vicios"></div>
+</section>
+
+<section id="mapa" class="pagina" hidden>
+  <p class="sobre sobre-pista">&nbsp;</p>
+  <h1>Mapa</h1>
+  <div class="segmentos" role="radiogroup" aria-label="Cor da linha">
+    <label><input type="radio" name="cor" value="">Linha</label>
+    <label><input type="radio" name="cor" value="v">Velocidade</label>
+    <label><input type="radio" name="cor" value="freio">Freio</label>
+    <label><input type="radio" name="cor" value="acel">Acelerador</label>
+    <label><input type="radio" name="cor" value="ganho">Tempo</label>
+  </div>
+  <div id="caixa-mapa">
+    <div id="legenda" class="flutua vidro"><span id="leg-min"></span><span id="leg-barra"></span><span id="leg-max"></span></div>
+    <div class="flutua botoes-mapa">
+      <button id="bt-zebras" class="vidro chip-bt" aria-pressed="true">Zebras</button>
+      <button id="curva-a-curva" class="vidro chip-bt">Curva a curva</button>
+      <button id="inteira" class="vidro chip-bt" hidden>Pista inteira</button>
+    </div>
+    <canvas id="mapa-canvas"></canvas>
+  </div>
+  <p class="nota">
+    <span style="color:var(--a)">━</span> volta · <span style="color:var(--r)">━</span> referência ·
+    <span style="color:#ff3b30">▪</span><span style="color:#fff;text-shadow:0 0 1px #000">▪</span> zebras ·
+    <span style="color:#d08a2c">✕</span> fora da pista · ▲ sentido. Toque numa curva.
+  </p>
+</section>
+
+<section id="graficos" class="pagina" hidden>
+  <p class="sobre sobre-pista">&nbsp;</p>
+  <h1>Gráficos</h1>
+  <h2 class="secao">Delta <small>acima de 0 = mais lento que a referência</small></h2>
+  <div class="card graf-card"><div class="graf"><canvas id="g-delta"></canvas></div></div>
+  <h2 class="secao">Velocidade <small>km/h</small></h2>
+  <div class="card graf-card"><div class="graf"><canvas id="g-vel"></canvas></div></div>
+  <h2 class="secao">Pedais <small>acelerador · freio tracejado</small></h2>
+  <div class="card graf-card"><div class="graf"><canvas id="g-pedais"></canvas></div></div>
+  <h2 class="secao">Linha <small>m · acima de 0 = mais por dentro</small></h2>
+  <div class="card graf-card"><div class="graf"><canvas id="g-linha"></canvas></div></div>
+</section>
+
+<section id="voltas" class="pagina" hidden>
+  <p class="sobre">Escolha a volta e a referência</p>
+  <h1>Voltas</h1>
+  <div class="card status" id="status"><span class="ponto"></span><div class="corpo"><strong>Verificando…</strong></div></div>
+  <div class="segmentos" id="pilotos" role="radiogroup" aria-label="Piloto" hidden style="margin-top:14px"></div>
+  <div id="lista-voltas"></div>
+</section>
+
+<aside id="folha" class="vidro" aria-live="polite">
+  <header>
+    <button class="seta" id="anterior" aria-label="Curva anterior">‹</button>
+    <span class="badge" id="folha-badge"></span>
+    <span class="perda" id="folha-perda"></span>
+    <button class="seta" id="proxima" aria-label="Próxima curva">›</button>
+    <button id="fechar" aria-label="Fechar">✕</button>
+  </header>
+  <div class="numeros" id="folha-numeros"></div>
+  <ul class="partes" id="folha-partes"></ul>
+  <p class="dica-gesto">deslize para os lados para trocar de curva · <span id="folha-pos"></span></p>
+</aside>
+
+<nav class="abas vidro">
+  <a href="#resumo" data-p="resumo"><svg viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5V9.5M10 3h4M18.5 7l1.5-1.5"/></svg>Resumo</a>
+  <a href="#mapa" data-p="mapa"><svg viewBox="0 0 24 24"><path d="M3.5 6.5l5.5-2.5 6 2.5 5.5-2.5v13.5l-5.5 2.5-6-2.5-5.5 2.5z"/><path d="M9 4v13.5M15 6.5V20"/></svg>Mapa</a>
+  <a href="#graficos" data-p="graficos"><svg viewBox="0 0 24 24"><path d="M3.5 19.5h17"/><path d="M4.5 15l4.5-5 4 3.5 6.5-8"/></svg>Gráficos</a>
+  <a href="#voltas" data-p="voltas"><svg viewBox="0 0 24 24"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.75" cy="6.5" r=".9"/><circle cx="4.75" cy="12" r=".9"/><circle cx="4.75" cy="17.5" r=".9"/></svg>Voltas</a>
+</nav>
+
+<script>
+const ESPELHAR = true;  // conferido em Interlagos: sem isso, o mapa sai espelhado
+const $ = id => document.getElementById(id);
+const cor = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = ms => `${Math.floor(ms / 60000)}:${(ms % 60000 / 1000).toFixed(3).padStart(6, '0')}`;
+const num = (x, nd = 2) => x.toFixed(nd).replace('.', ',');
+const sinalS = (s, nd = 2) => `${s > 0 ? '+' : s < 0 ? '−' : ''}${num(Math.abs(s), nd)} s`;
+const dataCurta = q => `${q.slice(8, 10)}/${q.slice(5, 7)} · ${q.slice(11, 16)}`;
+const rotuloCurva = c => (c.marcada?.length ? '📍 ' : '') + (c.nome || `C${c.t || c.n}`);  // 📍 = marcada no botão
+const corPerda = p => p > 0.02 ? cor('--a') : p < -0.02 ? cor('--verde') : cor('--mut');
+let voltas = [], selA = null, selB = null, dados = null, graficos = {}, zoomAtual = null, caixasRotulo = [];
+
+// ---------- Navegação por abas (#resumo, #mapa, #graficos, #voltas) ----------
+const PAGINAS = ['resumo', 'mapa', 'graficos', 'voltas'];
+function mostrarPagina() {
+  const p = PAGINAS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'resumo';
+  PAGINAS.forEach(id => { $(id).hidden = id !== p; });
+  document.querySelectorAll('.abas a').forEach(a => a.dataset.p === p ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
+  $('folha').classList.toggle('aberta', p === 'mapa' && !!zoomAtual);
+  $('inteira').hidden = !zoomAtual;
+  $('curva-a-curva').hidden = !!zoomAtual;
+  window.scrollTo(0, 0);
+  if (p === 'mapa' && dados) requestAnimationFrame(desenharMapa);  // o mapa precisa estar visível para medir o tamanho
+}
+window.addEventListener('hashchange', mostrarPagina);
+
+// ---------- Dados ----------
+async function iniciar() {
+  mostrarPagina();
+  try { voltas = await (await fetch('/voltas')).json(); } catch { voltas = []; }
+  if (voltas.length) {
+    selA = voltas[0];
+    selB = melhorRef(selA);
+  }
+  renderVoltas();
+  if (!voltas.length) {
+    $('hero').innerHTML = '<span class="vazio">Nenhuma volta gravada ainda. Dê uma volta completa no jogo e recarregue.</span>';
+    $('blocos-comparacao').hidden = true;
+    return;
+  }
+  await comparar();
+}
+
+// Piloto = nome que o jogo manda no pacote Participants (gamertag). Voltas antigas não têm.
+const quem = v => v.piloto || 'sem nome';
+const melhorDaPista = (p, pil) => voltas.filter(v => v.pista === p && quem(v) === pil && !v.invalida)
+  .sort((x, y) => x.tempo_ms - y.tempo_ms)[0];
+function melhorRef(a) {  // a melhor do mesmo piloto; se ele só tem essa volta, a melhor de qualquer um
+  const outras = voltas.filter(v => v.pista === a.pista && v.arquivo !== a.arquivo).sort((x, y) => x.tempo_ms - y.tempo_ms);
+  const dele = outras.filter(v => quem(v) === quem(a));
+  return dele.find(v => !v.invalida) || outras.find(v => !v.invalida) || outras[0] || a;
+}
+
+async function comparar() {
+  const [res, zeb, bor] = await Promise.all([
+    fetch(`/comparar?a=${encodeURIComponent(selA.arquivo)}&b=${encodeURIComponent(selB.arquivo)}`).then(r => r.json()),
+    fetch(`/zebras?pista=${selA.pista}`).then(r => r.json()).catch(() => ({ pontos: [], borda: null })),
+    fetch(`/bordas?pista=${selA.pista}`).then(r => r.json()).catch(() => ({})),
+  ]);
+  dados = { ...res, zebras: zeb.pontos, zebrasBorda: zeb.borda, bordas: bor.esq ? bor : null };
+  zoomAtual = null;
+  $('folha').classList.remove('aberta');
+  $('inteira').hidden = true;
+  $('curva-a-curva').hidden = false;
+  document.querySelectorAll('.sobre-pista').forEach(e => { e.textContent = `${selA.nome_pista} · ${fmt(selA.tempo_ms)}`; });
+  renderResumo();
+  desenharGraficos();
+  if (!$('mapa').hidden) desenharMapa();
+}
+
+// ---------- Resumo ----------
+function renderResumo() {
+  const a = selA, b = selB, dif = (a.tempo_ms - b.tempo_ms) / 1000, melhor = melhorDaPista(a.pista, quem(a));
+  $('sobre-resumo').textContent = `${a.nome_pista} · ${quem(a)} · ${dataCurta(a.quando)}`;
+  $('hero').innerHTML = `
+    <div class="tempo" style="${melhor && melhor.arquivo === a.arquivo ? 'color:var(--roxo)' : ''}">${fmt(a.tempo_ms)}</div>
+    <div class="linha2">
+      ${a === b ? '<span>Nenhuma outra volta nesta pista para comparar.</span>'
+        : `<span class="chip ${dif > 0 ? 'perde' : dif < 0 ? 'ganha' : 'neutro'}">${sinalS(dif, 3)}</span>
+           <span>vs <span style="color:var(--r);font-weight:600">${fmt(b.tempo_ms)}</span>${b.invalida ? ' (inválida)' : ''}${quem(b) !== quem(a) ? ` de ${esc(quem(b))}` : ''}</span>`}
+      ${a.invalida ? '<span class="chip neutro">inválida</span>' : ''}
+      ${melhor && melhor.arquivo === a.arquivo ? '<span class="chip" style="background:color-mix(in srgb,var(--roxo) 17%,transparent);color:var(--roxo)">melhor volta</span>' : ''}
+      ${a.carro === 'rival' ? '<span class="chip neutro">rival</span>' : ''}
+    </div>`;
+  $('blocos-comparacao').hidden = a === b;
+  if (a.invalida) {
+    $('ia').innerHTML = '<span class="vazio">Volta inválida: o engenheiro só analisa voltas válidas.</span>';
+  } else {
+    $('ia').innerHTML = '<button class="pilula grande" id="bt-ia">Analisar esta volta</button>';
+    $('bt-ia').onclick = analisarIA;
+  }
+  if ($('vicios').dataset.chave !== `${a.pista}|${quem(a)}`) {  // mantém o texto enquanto a pista e o piloto não mudam
+    $('vicios').dataset.chave = `${a.pista}|${quem(a)}`;
+    $('vicios').innerHTML = '<button class="pilula grande" id="bt-vicios">Analisar meus vícios nesta pista</button>';
+    $('bt-vicios').onclick = analisarVicios;
+  }
+  const item = c => `
+    <li class="toque" data-n="${c.n}">
+      <span class="badge">${rotuloCurva(c)}</span>
+      <div class="corpo"><ul class="partes">${htmlFases(c, true)}</ul></div>
+      <span class="perda" style="color:${corPerda(c.perda)}">${sinalS(c.perda)}</span>
+    </li>`;
+  const ganhos = dados.curvas.filter(c => c.perda < -0.02).sort((x, y) => x.perda - y.perda);
+  $('lista-perdas').innerHTML = dados.dicas.length ? dados.dicas.map(item).join('') : '<li class="vazio">Nenhuma curva com perda relevante.</li>';
+  $('lista-ganhos').innerHTML = ganhos.length ? ganhos.map(item).join('') : '<li class="vazio">Nenhuma curva com ganho relevante.</li>';
+  // Cada curva vai da sua freada até a freada da próxima, então a soma de todas é a diferença da volta.
+  const soma = dados.curvas.reduce((t, c) => t + c.perda, 0), miudas = dados.curvas.filter(c => Math.abs(c.perda) <= 0.02);
+  $('nota-soma').textContent = `Cada curva inclui a reta até a próxima: somando todas dá ${sinalS(soma, 3)}, a diferença da volta.`
+    + (miudas.length ? ` Fora das listas: ${miudas.map(c => c.nome).join(', ')} (menos de 0,02 s).` : '');
+  document.querySelectorAll('#resumo li[data-n]').forEach(li => li.onclick = () => {
+    zoomAtual = dados.curvas.find(c => c.n === +li.dataset.n);
+    preencherFolha(zoomAtual);
+    location.hash = 'mapa';
+  });
+}
+
+// O Claude lê a comparação no Pi (claude -p) e escreve como engenheiro de pista.
+const esc = s => s.replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+const textoIA = (r, bt) => r.erro
+  ? `<p class="vazio">${esc(r.erro)}</p><button class="pilula grande" id="${bt}">Tentar de novo</button>`
+  : r.texto.split(/\n+/).filter(l => l.trim())
+      .map(l => `<p>${esc(l).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')}</p>`).join('');
+
+async function analisarIA() {
+  const par = [selA.arquivo, selB.arquivo];
+  $('ia').innerHTML = '<div class="carregando">O engenheiro está analisando a volta… (uns 30 s)</div>';
+  let r;
+  try {
+    r = await (await fetch(`/analisar?a=${encodeURIComponent(par[0])}&b=${encodeURIComponent(par[1])}`)).json();
+  } catch { r = { erro: 'Sem resposta do Pi.' }; }
+  if (selA.arquivo !== par[0] || selB.arquivo !== par[1]) return;  // trocou de volta no meio
+  $('ia').innerHTML = textoIA(r, 'bt-ia');
+  if (r.erro) $('bt-ia').onclick = analisarIA;
+}
+
+// Vícios: o Sonnet lê a estatística das últimas voltas da pista contra a melhor e acha o que se repete.
+async function analisarVicios() {
+  const chave = $('vicios').dataset.chave;
+  $('vicios').innerHTML = '<div class="carregando">O engenheiro está lendo as últimas voltas… (até 1 min)</div>';
+  let r;
+  try { r = await (await fetch(`/vicios?pista=${selA.pista}&piloto=${encodeURIComponent(selA.piloto || '')}`)).json(); }
+  catch { r = { erro: 'Sem resposta do Pi.' }; }
+  if ($('vicios').dataset.chave !== chave) return;  // trocou de pista ou de piloto no meio
+  $('vicios').innerHTML = textoIA(r, 'bt-vicios') + (r.voltas ? `<p class="sub">${r.voltas} voltas de ${esc(quem(selA))} contra a melhor dele.</p>` : '');
+  if (r.erro) $('bt-vicios').onclick = analisarVicios;
+}
+
+// ---------- Voltas ----------
+let filtroPiloto = null;
+try { filtroPiloto = localStorage.getItem('piloto'); } catch { }
+function renderVoltas() {
+  const pilotos = [...new Set(voltas.map(quem))];
+  if (filtroPiloto && !pilotos.includes(filtroPiloto)) filtroPiloto = null;
+  $('pilotos').hidden = pilotos.length < 2;
+  $('pilotos').innerHTML = [null, ...pilotos].map(p => `
+    <label><input type="radio" name="piloto" value="${p === null ? '' : esc(p)}" ${p === filtroPiloto ? 'checked' : ''}>${p === null ? 'Todos' : esc(p)}</label>`).join('');
+  document.querySelectorAll('input[name="piloto"]').forEach(r => r.onchange = () => {
+    filtroPiloto = r.value || null;
+    try { filtroPiloto ? localStorage.setItem('piloto', filtroPiloto) : localStorage.removeItem('piloto'); } catch { }
+    renderVoltas();
+  });
+  const visiveis = voltas.filter(v => !filtroPiloto || quem(v) === filtroPiloto);
+  const pistas = [...new Set(visiveis.map(v => v.pista))];
+  $('lista-voltas').innerHTML = pistas.map(p => {
+    const vs = visiveis.filter(v => v.pista === p);
+    return `<h2 class="secao">${vs[0].nome_pista} <small>${vs.length} ${vs.length === 1 ? 'volta' : 'voltas'}</small></h2>
+      <ul class="lista">${vs.map(v => `
+        <li class="volta">
+          <div class="corpo">
+            <strong style="${melhorDaPista(p, quem(v))?.arquivo === v.arquivo ? 'color:var(--roxo)' : ''}">${fmt(v.tempo_ms)}</strong>
+            ${v.invalida ? '<span class="chip neutro">inválida</span>' : ''}${v.carro === 'rival' ? '<span class="chip neutro">rival</span>' : ''}
+            <div class="sub">${dataCurta(v.quando)}${filtroPiloto ? '' : ` · ${esc(quem(v))}`}</div>
+          </div>
+          <div class="acoes">
+            <button class="pilula ${selA && v.arquivo === selA.arquivo ? 'ativa-a' : ''}" data-a="${v.arquivo}">Volta</button>
+            <button class="pilula ${selB && v.arquivo === selB.arquivo && selA !== selB ? 'ativa-b' : ''}" data-b="${v.arquivo}"
+              ${!selA || v.pista !== selA.pista || v.arquivo === selA.arquivo ? 'disabled' : ''}>Ref.</button>
+          </div>
+        </li>`).join('')}</ul>`;
+  }).join('') || '<p class="vazio">Nenhuma volta gravada ainda.</p>';
+  document.querySelectorAll('[data-a]').forEach(bt => bt.onclick = () => {
+    selA = voltas.find(v => v.arquivo === bt.dataset.a);
+    if (!selB || selB.pista !== selA.pista || selB === selA) selB = melhorRef(selA);
+    renderVoltas();
+    comparar();
+  });
+  document.querySelectorAll('[data-b]').forEach(bt => bt.onclick = () => {
+    selB = voltas.find(v => v.arquivo === bt.dataset.b);
+    renderVoltas();
+    comparar();
+  });
+}
+
+// ---------- Gráficos ----------
+const pts = (xs, ys) => xs.map((x, i) => ({ x, y: ys[i] }));
+const serie = (label, data, c, extra = {}) => ({ label, data, borderColor: c, backgroundColor: c, borderWidth: 1.5,
+  pointRadius: 0, showLine: true, ...extra });
+
+function grafico(id, datasets, opcoes = {}) {
+  graficos[id]?.destroy();
+  const g = cor('--sep'), m = cor('--mut');
+  const eixo = extra => ({ grid: { color: g }, border: { display: false }, ticks: { color: m, font: { size: 11 } }, ...extra });
+  graficos[id] = new Chart($(id), {
+    type: 'scatter', data: { datasets }, plugins: opcoes.plugins || [],
+    options: { animation: false, maintainAspectRatio: false, interaction: { mode: 'nearest', intersect: false },
+      onClick: opcoes.onClick, plugins: { legend: { display: false }, tooltip: { enabled: !opcoes.semDica } },
+      layout: { padding: opcoes.padding || 0 },
+      scales: { x: eixo(opcoes.x), y: eixo(opcoes.y) } },
+  });
+}
+
+function desenharGraficos() {
+  const G = dados.grade, A = dados.a, R = dados.r, ca = cor('--a'), cr = cor('--r');
+  const xm = { ticks: { color: cor('--mut'), font: { size: 11 }, callback: v => `${v / 1000} km` } };
+  grafico('g-delta', [serie('delta', pts(G, dados.delta), ca, { fill: { value: 0 }, backgroundColor: ca + '22' })], { x: xm });
+  grafico('g-vel', [serie('ref', pts(G, R.v), cr), serie('volta', pts(G, A.v), ca)], { x: xm });
+  grafico('g-pedais', [
+    serie('acel ref', pts(G, R.acel), cr), serie('acel', pts(G, A.acel), ca),
+    serie('freio ref', pts(G, R.freio), cr, { borderDash: [4, 3] }), serie('freio', pts(G, A.freio), ca, { borderDash: [4, 3] }),
+  ], { x: xm, y: { min: 0, max: 1 } });
+  grafico('g-linha', [serie('dentro', pts(G, dados.dentro), ca, { fill: { value: 0 }, backgroundColor: ca + '22' })], { x: xm });
+}
+
+// ---------- Mapa ----------
+// Mapa de calor: valor por ponto (volta 'a' ou referência 'r') e cor para t entre 0 e 1.
+const mistura = (c1, c2, t) => `rgb(${c1.map((v, k) => Math.round(v + (c2[k] - v) * t)).join(',')})`;
+const CINZA = [142, 142, 147];
+const CALOR = {
+  v:     { valores: (d, k) => d[k].v, cor: t => `hsl(${240 - 240 * t} 85% 52%)`, rotulo: v => `${Math.round(v)} km/h` },
+  freio: { valores: (d, k) => d[k].freio, fixo: [0, 1], cor: t => mistura(CINZA, [255, 59, 48], t), rotulo: v => `${Math.round(v * 100)}%` },
+  acel:  { valores: (d, k) => d[k].acel, fixo: [0, 1], cor: t => mistura(CINZA, [52, 199, 89], t), rotulo: v => `${Math.round(v * 100)}%` },
+  // ritmo de variação do delta em ±15 m: verde = ganhando tempo, vermelho = perdendo. Só existe para a volta.
+  ganho: { valores: (d, k) => k === 'a' ? d.delta.map((_, i, D) => D[Math.min(D.length - 1, i + 3)] - D[Math.max(0, i - 3)]) : null,
+           simetrico: true, rotulo: v => v < 0 ? 'ganhando' : 'perdendo',
+           cor: t => t < 0.5 ? mistura(CINZA, [52, 199, 89], (0.5 - t) * 2) : mistura(CINZA, [255, 59, 48], (t - 0.5) * 2) },
+};
+
+// [cor da volta, cor da referência ou null], as duas na MESMA escala para comparar no olho.
+function escalaCalor(chave) {
+  const c = CALOR[chave], va = c.valores(dados, 'a'), vr = c.valores(dados, 'r');
+  const todos = vr ? va.concat(vr) : va;
+  let [min, max] = c.fixo || [Math.min(...todos), Math.max(...todos)];
+  if (c.simetrico) {  // corta os 5% mais extremos, senão um pico apaga o resto
+    const abs = todos.map(Math.abs).sort((x, y) => x - y), lim = abs[Math.floor(abs.length * 0.95)] || 1;
+    [min, max] = [-lim, lim];
+  }
+  const t = v => Math.max(0, Math.min(1, (v - min) / (max - min || 1)));
+  $('legenda').style.display = 'flex';
+  $('leg-min').textContent = c.rotulo(min);
+  $('leg-max').textContent = c.rotulo(max);
+  $('leg-barra').style.background = `linear-gradient(90deg, ${[0, .25, .5, .75, 1].map(c.cor).join(',')})`;
+  return [i => c.cor(t(va[i])), vr && (i => c.cor(t(vr[i])))];
+}
+
+// Asfalto: a faixa entre as duas bordas (preenchimento par-ímpar = só o anel da pista), por baixo de tudo.
+const asfalto = {
+  id: 'asfalto',
+  beforeDatasetsDraw(chart) {
+    if (!dados.bordas) return;
+    const { ctx, scales: { x, y }, chartArea: area } = chart, zz = z => ESPELHAR ? -z : z;
+    const caminho = pts => pts.forEach(([px, pz], i) => ctx[i ? 'lineTo' : 'moveTo'](x.getPixelForValue(px), y.getPixelForValue(zz(pz))));
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(area.left, area.top, area.width, area.height);
+    ctx.clip();
+    ctx.beginPath();
+    caminho(dados.bordas.esq); ctx.closePath();
+    caminho(dados.bordas.dir); ctx.closePath();
+    ctx.fillStyle = cor('--card2');
+    ctx.fill('evenodd');
+    ctx.strokeStyle = cor('--mut');
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // Zebras em cima da borda: faixa branca com listras vermelhas, ~1,2 m de largura e listras de ~1,5 m.
+    if (mostrarZebras && dados.zebrasBorda) {
+      const m = Math.abs(x.getPixelForValue(1) - x.getPixelForValue(0));  // pixels por metro
+      for (const lado of ['esq', 'dir']) {
+        for (const [i0, i1] of dados.zebrasBorda[lado] || []) {
+          ctx.beginPath();
+          caminho(dados.bordas[lado].slice(i0, i1 + 1));
+          ctx.lineWidth = Math.max(3, 1.2 * m);
+          ctx.lineCap = 'butt';
+          ctx.setLineDash([]);
+          ctx.strokeStyle = '#fff';
+          ctx.stroke();
+          ctx.setLineDash([Math.max(3, 1.5 * m), Math.max(3, 1.5 * m)]);
+          ctx.strokeStyle = '#ff3b30';
+          ctx.stroke();
+        }
+      }
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+  },
+};
+
+// Rótulos das curvas: com pílula (perda/ganho) nas curvas analisadas, só o número nas demais.
+const rotulosCurvas = {
+  id: 'rotulos',
+  afterDatasetsDraw(chart) {
+    const { ctx, scales: { x, y }, chartArea: area } = chart;
+    const zz = z => ESPELHAR ? -z : z, R = dados.r, n = R.x.length;
+    const prende = (by, h) => Math.max(area.top + 2, Math.min(area.bottom - h - 2, by));  // rótulo nunca sai do mapa
+    // ponytail: "fora" = longe do centro da pista; numa curva do lado de dentro do traçado o rótulo pode cair sobre a pista
+    const mx = x.getPixelForValue(R.x.reduce((s, v) => s + v, 0) / n);
+    const my = y.getPixelForValue(R.z.reduce((s, v) => s + zz(v), 0) / n);
+    const analisadas = new Set(dados.curvas.map(c => c.t).filter(Boolean));
+    const itens = dados.curvas.map(c => ({ c, i: c.pontos_r[1], texto: `${rotuloCurva(c)}  ${sinalS(c.perda).replace(' s', '')}` }))
+      .concat(dados.cantos.filter(k => !analisadas.has(k.t))
+        .map(k => ({ i: Math.min(n - 1, Math.round(k.d / 5)), texto: `C${k.t}` })));
+    caixasRotulo = [];
+    const ocupadas = [];
+    ctx.save();
+    ctx.textBaseline = 'middle';
+
+    // Curva ampliada: "freio", "ápice", "saída" de cada volta, a volta de um lado da linha e a referência do outro.
+    if (zoomAtual) {
+      const px = (V, i) => [x.getPixelForValue(V.x[i]), y.getPixelForValue(zz(V.z[i]))];
+      ctx.font = '600 11px -apple-system, system-ui, sans-serif';
+      for (const [V, pontos, c, lado] of [[R, zoomAtual.pontos_r, cor('--r'), -1], [dados.a, zoomAtual.pontos_a, cor('--a'), 1]]) {
+        pontos.forEach((i, k) => {
+          const [ax, ay] = px(V, i);
+          const [x0, y0] = px(R, Math.max(0, i - 1)), [x1, y1] = px(R, Math.min(n - 1, i + 1));
+          const m = Math.hypot(x1 - x0, y1 - y0) || 1, nx = -(y1 - y0) / m * lado, ny = (x1 - x0) / m * lado;
+          const texto = ['freio', 'ápice', 'saída'][k], w = ctx.measureText(texto).width + 12, h = 18;
+          const cx = ax + nx * 22, cy0 = ay + ny * 22;
+          const bx = Math.max(area.left + 2, Math.min(area.right - w - 2, cx - w / 2));
+          let by = prende(cy0 - h / 2, h);
+          const bate = () => ocupadas.some(b => bx < b.bx + b.w && bx + w > b.bx && by < b.by + b.h && by + h > b.by);
+          for (let t = 1; bate() && t < 8; t++) by = prende(cy0 - h / 2 + (t % 2 ? 1 : -1) * Math.ceil(t / 2) * (h + 2), h);
+          ocupadas.push({ bx, by, w, h });
+          ctx.strokeStyle = c;  // fio do rótulo até o ponto exato
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(bx + w / 2, by + h / 2);
+          ctx.stroke();
+          ctx.fillStyle = c;
+          ctx.beginPath();
+          ctx.arc(ax, ay, 3.5, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.roundRect(bx, by, w, h, h / 2);
+          ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.fillText(texto, bx + 6, by + h / 2);
+        });
+      }
+    }
+    for (const it of itens) {
+      let px = x.getPixelForValue(R.x[it.i]), py = y.getPixelForValue(zz(R.z[it.i]));
+      if (px < area.left || px > area.right || py < area.top || py > area.bottom) continue;
+      const dist = Math.hypot(px - mx, py - my) || 1, afasta = it.c ? 24 : 16;
+      px += (px - mx) / dist * afasta;
+      py += (py - my) / dist * afasta;
+      ctx.font = it.c ? '600 12px -apple-system, system-ui, sans-serif' : '600 11px -apple-system, system-ui, sans-serif';
+      const w = ctx.measureText(it.texto).width + (it.c ? 14 : 6), h = it.c ? 22 : 16;
+      const bx = Math.max(area.left + 2, Math.min(area.right - w - 2, px - w / 2));  // não deixa cortar na borda
+      let by = prende(py - h / 2, h);
+      const bate = () => ocupadas.some(b => bx < b.bx + b.w && bx + w > b.bx && by < b.by + b.h && by + h > b.by);
+      for (let k = 1; bate() && k < 8; k++) by = prende(py - h / 2 + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (h + 3), h);
+      ocupadas.push({ bx, by, w, h });
+      if (it.c) {
+        const ativa = zoomAtual && zoomAtual.n === it.c.n;
+        ctx.fillStyle = ativa ? corPerda(it.c.perda) : cor('--card');
+        ctx.strokeStyle = corPerda(it.c.perda);
+        ctx.lineWidth = 1.5;
+        ctx.shadowColor = 'rgba(0,0,0,.18)';
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.roundRect(bx, by, w, h, h / 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.stroke();
+        ctx.fillStyle = ativa ? '#fff' : cor('--fg');
+        caixasRotulo.push({ c: it.c, bx, by, w, h });
+      } else {
+        ctx.fillStyle = cor('--mut');
+      }
+      ctx.fillText(it.texto, bx + (it.c ? 7 : 3), by + h / 2);
+    }
+    ctx.restore();
+  },
+};
+
+function desenharMapa() {
+  const A = dados.a, R = dados.r, ca = cor('--a'), cr = cor('--r');
+  const zz = z => ESPELHAR ? -z : z;
+  const P = (V, i) => ({ x: V.x[i], y: zz(V.z[i]) });
+  const linhaR = R.x.map((_, i) => P(R, i)), linhaA = A.x.map((_, i) => P(A, i));
+
+  // Janela visível: a pista inteira ou a curva escolhida, com a mesma escala nos dois eixos.
+  let janela = linhaR;
+  if (zoomAtual) {
+    const [e, , s] = zoomAtual.pontos_r, pa = zoomAtual.pontos_a;
+    // A saída (pé no fundo) pode vir antes de a curva acabar, como no Bico de Pato: segue até a linha parar de virar.
+    const vira = i => {  // giro em radianos a cada 5 m
+      const a = linhaR[i - 1], b = linhaR[i], c = linhaR[i + 1];
+      const ux = b.x - a.x, uy = b.y - a.y, vx = c.x - b.x, vy = c.y - b.y;
+      return Math.abs(ux * vy - uy * vx) / (Math.hypot(ux, uy) * Math.hypot(vx, vy) || 1);
+    };
+    let fim = Math.max(s, pa[2]);
+    while (fim < linhaR.length - 3 && fim - s < 40 && Math.max(vira(fim), vira(fim + 1)) > 0.04) fim++;
+    const i0 = Math.max(0, Math.min(e, pa[0]) - 6), i1 = fim + 6;
+    janela = linhaR.slice(i0, i1).concat(linhaA.slice(i0, i1));
+  }
+  const W = $('caixa-mapa').clientWidth || 300, H = $('caixa-mapa').clientHeight || 300;
+  // a folha cobre a parte de baixo: o zoom usa só o que sobra acima dela (offsetTop ignora a animação de subida)
+  const folga = zoomAtual ? Math.max(0, $('caixa-mapa').getBoundingClientRect().bottom - $('folha').offsetTop + 12) : 0;
+  const mg = zoomAtual ? 36 : 0;  // margem em px para os rótulos freio/ápice/saída não cortarem
+  const xs = janela.map(p => p.x), ys = janela.map(p => p.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const esc = Math.max((maxX - minX) / (W - 2 * mg), (maxY - minY) / (H - folga - 2 * mg), 40 / Math.min(W, H)) * (zoomAtual ? 1 : 1.15);  // metros por pixel
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  const topo = cy + esc * (H - folga) / 2;
+
+  const chave = document.querySelector('input[name="cor"]:checked').value;
+  $('legenda').style.display = 'none';
+  let ds;
+  if (!chave) {
+    ds = [serie('ref', linhaR, cr, { borderWidth: 2 }), serie('volta', linhaA, ca, { borderWidth: 2 })];
+  } else {
+    const [corA, corR] = escalaCalor(chave);
+    if (!corR) {
+      ds = [serie('ref', linhaR, cr, { borderWidth: 1, borderDash: [3, 3] }),
+            serie('volta', linhaA, ca, { borderWidth: 4, segment: { borderColor: s => corA(s.p0DataIndex) } })];
+    } else {
+      // lado a lado: afasta cada linha ~3 px para um lado da direção da pista, para as cores não se cobrirem
+      const d = esc * 3;
+      const lado = (linha, sinal) => linha.map((p, i) => {
+        const a = linhaR[Math.max(0, i - 1)], b = linhaR[Math.min(linhaR.length - 1, i + 1)];
+        const m = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+        return { x: p.x - (b.y - a.y) / m * d * sinal, y: p.y + (b.x - a.x) / m * d * sinal };
+      });
+      ds = [serie('ref', lado(linhaR, -1), cr, { borderWidth: 3, segment: { borderColor: s => corR(s.p0DataIndex) } }),
+            serie('volta', lado(linhaA, 1), ca, { borderWidth: 5, segment: { borderColor: s => corA(s.p0DataIndex) } })];
+    }
+  }
+  // zebras (de todas as voltas da pista) por baixo das linhas; ✕ onde esta volta pôs roda fora da pista
+  const pontosXZ = lista => lista.map(([x, z]) => ({ x, y: zz(z) }));
+  if (mostrarZebras && !(dados.bordas && dados.zebrasBorda)) {  // sem bordas: pontos soltos, vermelho e branco
+    const par = dados.zebras.filter(([x, z]) => (Math.round(x) + Math.round(z)) % 2 === 0);
+    const impar = dados.zebras.filter(([x, z]) => (Math.round(x) + Math.round(z)) % 2 !== 0);
+    const pz = { showLine: false, pointStyle: 'rect', pointRadius: 1.4, borderWidth: 0 };
+    ds.unshift(serie('zebras', pontosXZ(par), '#ff3b30', pz),
+               serie('zebras2', pontosXZ(impar), '#ffffff', { ...pz, borderWidth: .5, borderColor: 'rgba(0,0,0,.35)' }));
+  }
+  ds.push(serie('fora', pontosXZ(dados.fora_a), '#d08a2c', { showLine: false, pointStyle: 'crossRot', pointRadius: 4, borderWidth: 1.5 }));
+  // setas de sentido a cada ~400 m, na linha da referência
+  const setas = [];
+  for (let i = 4; i < linhaR.length - 3; i += 80) setas.push(i);
+  ds.push(serie('sentido', setas.map(i => linhaR[i]), cor('--mut'), { showLine: false, pointStyle: 'triangle', pointRadius: 6,
+    pointRotation: setas.map(i => Math.atan2(linhaR[i + 2].x - linhaR[i - 2].x, linhaR[i + 2].y - linhaR[i - 2].y) * 180 / Math.PI) }));
+  const sem = { display: false };
+  grafico('mapa-canvas', ds, {
+    x: { min: cx - esc * W / 2, max: cx + esc * W / 2, ticks: sem, grid: sem },
+    y: { min: topo - esc * H, max: topo, ticks: sem, grid: sem },
+    plugins: [asfalto, rotulosCurvas], semDica: true,
+    onClick: ev => {
+      const r = caixasRotulo.find(b => ev.x >= b.bx - 8 && ev.x <= b.bx + b.w + 8 && ev.y >= b.by - 8 && ev.y <= b.by + b.h + 8);
+      if (r) selecionarCurva(r.c);
+    },
+  });
+}
+
+// A perda da curva dividida em fases (medida no delta), com o que aconteceu em cada uma.
+// O que aconteceu numa fase que não perdeu tempo fica apagado: não foi a causa.
+const NOME_FASE = { freada: 'Freada', entrada: 'Até o ápice', saida: 'Saída', reta: 'Reta até a próxima' };
+function htmlFases(c, soPerdas = false) {
+  if (!c.fases) return c.partes.map(p => `<li>${p}</li>`).join('') || '<li class="vazio">igual à referência</li>';  // Pi antigo
+  const pior = Math.max(...c.fases.map(f => f.perda));
+  const fs = c.fases.filter(f => !soPerdas || f.perda > 0.01);
+  return fs.map(f => `
+    <li class="fase${f.perda > 0.01 ? '' : ' fraca'}${f.perda === pior && pior > 0.01 ? ' pior' : ''}">
+      <span class="fase-nome">${NOME_FASE[f.fase]}</span>
+      <span class="fase-perda" style="color:${corPerda(f.perda)}">${sinalS(f.perda)}</span>
+      <span class="fase-partes">${f.partes.join(' · ') || (f.perda > 0.01 ? 'sem causa medida' : '—')}</span>
+    </li>`).join('') || '<li class="vazio">igual à referência</li>';
+}
+
+function preencherFolha(c) {
+  const i = dados.curvas.findIndex(k => k.n === c.n), fr = c.frenagem_m;
+  $('folha-badge').textContent = rotuloCurva(c);
+  $('folha-perda').textContent = `${c.perda > 0 ? 'perdeu' : 'ganhou'} ${num(Math.abs(c.perda))} s`;
+  $('folha-perda').style.color = corPerda(c.perda);
+  $('folha-numeros').innerHTML = `
+    <div><b>${fr === null ? 'não freou' : fr === 0 ? 'igual' : `${Math.abs(fr)} m ${fr < 0 ? 'antes' : 'depois'}`}</b><span>frenagem</span></div>
+    <div><b><span style="color:var(--a);font-size:inherit;text-transform:none">${c.vel_apice}</span> / <span style="color:var(--r);font-size:inherit;text-transform:none">${c.vel_apice_ref}</span></b><span>ápice km/h</span></div>`;
+  $('folha-partes').innerHTML = htmlFases(c);
+  $('folha-pos').textContent = `${i + 1} de ${dados.curvas.length}`;
+  $('anterior').disabled = i <= 0;
+  $('proxima').disabled = i >= dados.curvas.length - 1;
+}
+
+// Amplia a curva e mostra a folha com a dica; null volta para a pista inteira.
+function selecionarCurva(c) {
+  zoomAtual = c;
+  if (c) preencherFolha(c);
+  $('folha').classList.toggle('aberta', !!c);
+  $('inteira').hidden = !c;
+  $('curva-a-curva').hidden = !!c;
+  desenharMapa();
+}
+
+// Curva a curva: ‹ ›, setas do teclado ou deslizar a folha para os lados.
+function andarCurva(passo) {
+  if (!zoomAtual) return selecionarCurva(dados.curvas[0] || null);
+  const i = dados.curvas.findIndex(k => k.n === zoomAtual.n) + passo;
+  if (i >= 0 && i < dados.curvas.length) selecionarCurva(dados.curvas[i]);
+}
+$('anterior').onclick = () => andarCurva(-1);
+$('proxima').onclick = () => andarCurva(1);
+$('curva-a-curva').onclick = () => andarCurva(0);
+document.addEventListener('keydown', ev => {
+  if ($('mapa').hidden || !zoomAtual) return;
+  if (ev.key === 'ArrowLeft') andarCurva(-1);
+  if (ev.key === 'ArrowRight') andarCurva(1);
+  if (ev.key === 'Escape') selecionarCurva(null);
+});
+{
+  // A folha segue o dedo 1:1; soltar além de 60 px (ou num movimento rápido) troca de curva.
+  const folha = $('folha');
+  let x0 = null, y0 = 0, t0 = 0, dx = 0, horizontal = false;
+  folha.addEventListener('pointerdown', ev => {
+    if (ev.target.closest('button')) return;
+    x0 = ev.clientX; y0 = ev.clientY; t0 = performance.now(); dx = 0; horizontal = false;
+  });
+  folha.addEventListener('pointermove', ev => {
+    if (x0 === null) return;
+    dx = ev.clientX - x0;
+    if (!horizontal && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(ev.clientY - y0)) {
+      horizontal = true;
+      folha.setPointerCapture(ev.pointerId);
+      folha.classList.add('arrastando');
+    }
+    if (horizontal) {
+      const i = dados.curvas.findIndex(k => k.n === zoomAtual.n);
+      const fim = (dx > 0 && i <= 0) || (dx < 0 && i >= dados.curvas.length - 1);
+      folha.style.transform = `translateX(${fim ? dx / 3 : dx}px)`;  // resiste na primeira e na última curva
+    }
+  });
+  const soltar = () => {
+    if (x0 === null) return;
+    folha.classList.remove('arrastando');
+    folha.style.transform = '';
+    const rapido = Math.abs(dx) / Math.max(1, performance.now() - t0) > 0.5;
+    if (horizontal && (Math.abs(dx) > 60 || rapido)) andarCurva(dx < 0 ? 1 : -1);
+    x0 = null;
+  };
+  folha.addEventListener('pointerup', soltar);
+  folha.addEventListener('pointercancel', soltar);
+}
+
+let mostrarZebras = true;
+try { mostrarZebras = localStorage.getItem('zebras') !== '0'; } catch {}
+$('bt-zebras').setAttribute('aria-pressed', mostrarZebras);
+$('bt-zebras').onclick = () => {
+  mostrarZebras = !mostrarZebras;
+  $('bt-zebras').setAttribute('aria-pressed', mostrarZebras);
+  try { localStorage.setItem('zebras', mostrarZebras ? '1' : '0'); } catch {}
+  if (dados) desenharMapa();
+};
+
+$('fechar').onclick = () => selecionarCurva(null);
+$('inteira').onclick = () => selecionarCurva(null);
+
+// ---------- Rádio: ao fim de cada volta, bipe + tempo na hora, e a dica do Haiku logo depois ----------
+let radioLigado = false, audioCtx = null, vozPt = null;
+const escolherVoz = () => {
+  const vs = speechSynthesis.getVoices();
+  vozPt = vs.find(v => v.lang === 'pt-BR') || vs.find(v => v.lang.startsWith('pt')) || null;
+};
+if ('speechSynthesis' in window) { escolherVoz(); speechSynthesis.onvoiceschanged = escolherVoz; }
+
+function bipe(t = audioCtx && audioCtx.currentTime) {  // dois tons curtos, como o clique do rádio
+  if (!audioCtx) return;
+  [[0, 880], [0.13, 1320]].forEach(([dt, f]) => {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t + dt);
+    g.gain.exponentialRampToValueAtTime(0.2, t + dt + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dt + 0.1);
+    o.connect(g).connect(audioCtx.destination);
+    o.start(t + dt);
+    o.stop(t + dt + 0.12);
+  });
+}
+
+// Efeito de rádio de equipe: faixa de telefone, um pouco de saturação e chiado. Calibre aqui.
+const RADIO = { graves: 350, agudos: 3200, saturacao: 3, chiado: 0.015, chiadoFim: 0.12 };
+const curvaSat = new Float32Array(256).map((_, i) => Math.tanh(RADIO.saturacao * (i / 127.5 - 1)) / Math.tanh(RADIO.saturacao));
+let ruido = null;
+
+function chiado(t, dur, vol) {
+  if (!ruido) {
+    ruido = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
+    ruido.getChannelData(0).forEach((_, i, d) => { d[i] = Math.random() * 2 - 1; });
+  }
+  const s = audioCtx.createBufferSource(), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
+  s.buffer = ruido; s.loop = true;
+  f.type = 'bandpass'; f.frequency.value = 2000;
+  g.gain.value = vol;
+  s.connect(f).connect(g).connect(audioCtx.destination);
+  s.start(t); s.stop(t + dur);
+}
+
+function tocarRadio(buffer) {  // toca a fala do Piper com o efeito; resolve quando termina
+  const t = audioCtx.currentTime + 0.05, ini = t + 0.25, fim = ini + buffer.duration;
+  const src = audioCtx.createBufferSource(), hp = audioCtx.createBiquadFilter(), lp = audioCtx.createBiquadFilter();
+  const sat = audioCtx.createWaveShaper();
+  src.buffer = buffer;
+  hp.type = 'highpass'; hp.frequency.value = RADIO.graves;
+  lp.type = 'lowpass'; lp.frequency.value = RADIO.agudos;
+  sat.curve = curvaSat;
+  src.connect(hp).connect(lp).connect(sat).connect(audioCtx.destination);
+  bipe(t);
+  chiado(ini - 0.05, buffer.duration + 0.1, RADIO.chiado);
+  chiado(fim + 0.05, 0.2, RADIO.chiadoFim);  // o "chhh" de soltar o botão
+  src.start(ini);
+  return new Promise(ok => setTimeout(ok, (fim - audioCtx.currentTime + 0.4) * 1000));
+}
+
+const falarAparelho = texto => new Promise(ok => {  // reserva: voz do próprio aparelho
+  const u = new SpeechSynthesisUtterance(texto);
+  u.lang = 'pt-BR';
+  if (vozPt) u.voice = vozPt;
+  u.rate = 1.05;
+  u.onstart = () => bipe();
+  u.onend = u.onerror = ok;
+  speechSynthesis.speak(u);
+});
+
+let filaFala = Promise.resolve();
+function falar(texto) {
+  texto = texto.replace(/\*\*/g, '');
+  const wav = fetch(`/voz?texto=${encodeURIComponent(texto)}`)  // o Pi já começa a sintetizar
+    .then(r => r.ok ? r.arrayBuffer() : null).catch(() => null);
+  filaFala = filaFala.then(async () => {  // uma fala por vez: o tempo vem antes da dica
+    const buf = await wav;
+    if (!radioLigado) return;
+    if (buf && audioCtx) {
+      try { return await tocarRadio(await audioCtx.decodeAudioData(buf)); } catch { /* cai na voz do aparelho */ }
+    }
+    if ('speechSynthesis' in window) return falarAparelho(texto);
+  });
+}
+
+function falaDoTempo(v, ref) {
+  const s = v.tempo_ms / 1000, min = Math.floor(s / 60);
+  let t = `Volta ${min} minuto e ${num(s - min * 60, 3)}.`;
+  const melhor = melhorDaPista(v.pista, quem(v));
+  if (v.invalida) t += ' Volta inválida.';
+  else if (melhor && melhor.arquivo === v.arquivo) t += ' Melhor volta!';
+  if (ref && ref.arquivo !== v.arquivo) {
+    const d = (v.tempo_ms - ref.tempo_ms) / 1000, abs = Math.abs(d);
+    t += ` ${num(abs, 1)} ${abs >= 2 ? 'segundos' : 'segundo'} ${d < 0 ? 'mais rápida' : 'mais lenta'} que a referência.`;
+  }
+  return t;
+}
+
+async function radioVolta(v) {
+  const ref = melhorRef(v);
+  falar(falaDoTempo(v, ref));
+  if (v.marcas?.length) return;  // volta com marcas: o Pi manda a explicação delas (chega pelo /estado)
+  if (ref.arquivo === v.arquivo || v.invalida) return;  // primeira volta da pista, ou inválida: só o tempo
+  $('radio-nota').textContent = 'Engenheiro analisando a volta…';
+  try {
+    const r = await (await fetch(`/analisar?radio=1&a=${encodeURIComponent(v.arquivo)}&b=${encodeURIComponent(ref.arquivo)}`)).json();
+    if (radioLigado && r.texto) falar(r.texto);
+    $('radio-nota').textContent = r.texto ? `Última: “${r.texto}”` : (r.erro || 'Sem análise desta vez.');
+  } catch {
+    $('radio-nota').textContent = 'Sem resposta do Pi.';
+  }
+}
+
+$('bt-radio').onclick = () => {
+  radioLigado = !radioLigado;
+  $('bt-radio').classList.toggle('ligado', radioLigado);
+  $('bt-radio').textContent = radioLigado ? 'Rádio ligado' : 'Ligar rádio';
+  if (radioLigado) {
+    // o iOS só libera som e voz dentro de um toque: destrava os dois agora
+    if (navigator.audioSession) navigator.audioSession.type = 'playback';  // iOS 17+: toca mesmo com o iPhone no silencioso
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx.resume();
+    if ('speechSynthesis' in window) speechSynthesis.speak(new SpeechSynthesisUtterance(''));  // destrava a voz reserva
+    falar('Rádio ligado. Boa volta.');
+    $('radio-nota').textContent = 'Deixe a tela do iPhone ligada e esta página aberta.';
+  } else {
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    $('radio-nota').textContent = 'O engenheiro fala ao fim de cada volta.';
+  }
+};
+
+// ---------- Status ao vivo: de onde vem o dado, e volta nova aparece sozinha ----------
+let nVoltas = null;
+async function atualizarStatus() {
+  let s;
+  try { s = await (await fetch('/estado')).json(); } catch { return; }
+  const vivo = s.ha_s !== null && s.ha_s < 5;
+  const eu = s.carros.find(c => c.nome === 'eu');
+  $('status').classList.toggle('ao-vivo', vivo);
+  $('status').querySelector('.corpo').innerHTML = vivo
+    ? `<strong>Recebendo do Xbox</strong><div class="sub">${[eu && eu.piloto && esc(eu.piloto), s.pista, s.sessao, eu && eu.volta ? `volta ${eu.volta}, ${eu.dist} m` : null].filter(Boolean).join(' · ')}<br>
+       Rival: ${s.rival === null ? 'nenhum' : `carro ${s.rival}${s.carros.some(c => c.nome === 'rival' && c.amostras) ? ', gravando' : ''}`}</div>`
+    : `<strong>Sem dados do jogo</strong><div class="sub">${s.ha_s === null ? 'Nada recebido desde que o Pi ligou.' : `Último pacote há ${Math.round(s.ha_s / 60)} min.`}
+       No jogo: Telemetria UDP ligada, IP ${location.hostname}, porta 20777.</div>`;
+  if (nVoltas !== null && s.n_voltas !== nVoltas) {  // chegou volta nova
+    const seguia = !selA || selA === voltas[0], antes = new Set(voltas.map(v => v.arquivo));
+    voltas = await (await fetch('/voltas')).json();
+    if (radioLigado) voltas.filter(v => !antes.has(v.arquivo) && v.carro === 'eu').forEach(radioVolta);
+    if (seguia && voltas.length) { selA = voltas[0]; selB = melhorRef(selA); }
+    renderVoltas();
+    if (seguia && voltas.length) comparar();
+  }
+  nVoltas = s.n_voltas;
+  // Botões UDP Action do controle: o Pi monta a frase, a página fala
+  if (s.fala && ultimaFala !== null && s.fala.id !== ultimaFala && radioLigado) {
+    falar(s.fala.texto);
+    $('radio-nota').textContent = `Última: “${s.fala.texto}”`;
+  }
+  if (s.fala) ultimaFala = s.fala.id;
+}
+let ultimaFala = null;
+// com o rádio ligado, olha o Pi quase a cada meio segundo: a dica do botão precisa chegar antes da curva
+(function laco() { if (!document.hidden) atualizarStatus(); setTimeout(laco, radioLigado ? 500 : 4000); })();
+try { document.querySelector(`input[name="cor"][value="${localStorage.getItem('cor') || ''}"]`).checked = true; }
+catch { document.querySelector('input[name="cor"]').checked = true; }
+document.querySelectorAll('input[name="cor"]').forEach(r => r.onchange = () => {
+  try { localStorage.setItem('cor', r.value); } catch {}
+  if (dados) desenharMapa();
+});
+iniciar();
+</script>
+</body>
+</html>

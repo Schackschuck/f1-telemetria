@@ -1,0 +1,21 @@
+{
+  "_como": "Curvas oficiais por pista (chave = trackId do jogo). t = número oficial. d = distância do ápice na volta do jogo, em metros. Cada zona de frenagem casa com a curva mais próxima (até 120 m). O nome popular é o que aparece no app e no rádio.",
+  "_fonte_16": "Números: mercedesamgf1.com (How the Interlagos corners got their names). Distâncias: picos de curvatura medidos numa volta no F1 24, 14/11/2026. C13 a C15 são de pé no fundo e a posição é aproximada.",
+  "16": [
+    {"t": "1", "nome": "S do Senna", "d": 375},
+    {"t": "2", "nome": "S do Senna", "d": 480},
+    {"t": "3", "nome": "Curva do Sol", "d": 650},
+    {"t": "4", "nome": "Descida do Lago", "d": 1445},
+    {"t": "5", "nome": "Descida do Lago", "d": 1585},
+    {"t": "6", "nome": "Ferradura", "d": 2080},
+    {"t": "7", "nome": "Ferradura", "d": 2155},
+    {"t": "8", "nome": "Laranjinha", "d": 2350},
+    {"t": "9", "nome": "Pinheirinho", "d": 2480},
+    {"t": "10", "nome": "Bico de Pato", "d": 2770},
+    {"t": "11", "nome": "Mergulho", "d": 2980},
+    {"t": "12", "nome": "Junção", "d": 3285},
+    {"t": "13", "nome": "Café", "d": 3475},
+    {"t": "14", "nome": "Subida dos Boxes", "d": 3665},
+    {"t": "15", "nome": "Arquibancadas", "d": 3980}
+  ]
+}

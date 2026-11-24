@@ -1,0 +1,8 @@
+# Voltas gravadas: têm a gamertag de quem pilotou (inclusive rivais online)
+voltas/
+
+# Anotações de sessão
+HANDOFF.md
+
+__pycache__/
+*.pyc
